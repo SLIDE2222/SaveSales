@@ -1,0 +1,18 @@
+SaveSales Currency Update
+
+Store currencies included:
+BRL, USD, CAD, GBP, AUD, NZD, EUR, CHF, SEK, NOK, DKK, PLN, SGD, ZAR, INR
+
+Behavior:
+- Currency is an app-wide, LAN-synchronized setting.
+- Changing currency requires the admin password.
+- Existing numeric catalog prices are NOT exchange-rate converted when the currency changes.
+- New sales store the active currency permanently.
+- Historical sales/receipts retain their original currency.
+- Mixed-currency Daily Tracking and HTML statements show totals separately instead of adding unlike currencies.
+- Existing historical sales created before this update are treated as BRL for backward compatibility.
+
+Test:
+  py -3.12 main.py
+
+Then rebuild SaveSales.exe after verifying the feature.

@@ -1,0 +1,3 @@
+b2d71d743f34712934e9cd0191cf7ee23f6e736ca56c647f89cb836bfd18faaf  SaveSales.exe
+c14c0e1a72050c1345adf60add3cdbbf3f7810c742db94b1a45431924f2b94a2  SaveSales-LAN-update.zip
+b2d86b90092d10956fcb2c405808f24df1248b765a16e8f791b7a5195ab62eb4  SaveSales-Items-Cart-Guide.txt

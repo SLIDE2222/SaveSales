@@ -1,0 +1,8 @@
+OPCAO 1 - abrir a versao atual sem CMD:
+Dê duplo clique em "Abrir SaveSales Atualizado.vbs".
+Ele executa o main.py atual com Python 3.12 sem mostrar a janela preta do prompt.
+
+OPCAO 2 - criar o SaveSales.exe atualizado de verdade:
+Coloque estes arquivos na mesma pasta do main.py e dê duplo clique em "Rebuild SaveSales EXE.bat".
+Ele fecha o EXE antigo, compila os arquivos atuais, aplica savesales.ico e substitui o SaveSales.exe antigo.
+Depois disso, basta abrir SaveSales.exe normalmente.

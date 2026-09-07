@@ -1,0 +1,168 @@
+CURRENT BUILD: Items/Cart uses protocol v3; upgrade ALL PCs together.
+See ITEMS_CART_GUIDE.txt for the new catalog, carts, sales and latest tests.
+
+SaveSales: one application on every Windows PC
+
+QUICK START
+Use the SAME SaveSales.exe on every PC. Double-click it. Do not separately run
+server.py, choose a coordinator, enter an IP, or approve another PC in SaveSales.
+Each application starts its own service and local SQLite replica in background.
+One reachable peer is automatically elected to order shared writes. Every PC has
+the same business permissions, including add/delete with the shared admin password.
+Startup normally takes about 3–8 seconds. Changes normally appear within 2–3 seconds.
+Failover normally takes about 8–15 seconds; slow or blocked networking can take longer.
+
+FIRST RUN WITH YOUR EXISTING DATA
+Close the old SaveSales clients and old server first.
+For migration, first open this new app on the PC containing your most complete old
+data. Place the executable alongside savesales_shared.json, or employees.json and
+employee_times.json. Running the updated main.py in your existing project also works.
+The first peer imports those records automatically. Open the other PCs afterward.
+Legacy JSON files are never modified or deleted. Existing files on a joining PC are
+left untouched; once it finds the LAN journal it uses that journal instead of mixing
+in potentially stale local JSON. Preserve any unique old records for reconciliation.
+A malformed legacy JSON file prevents initialization instead of silently discarding it.
+The program does not contain your personal employee data inside the executable.
+
+FILES AND BACKUPS
+The working project was updated in place. Pre-change files are preserved in
+backup_before_peer_lan. The earlier backup_before_lan is also retained.
+Every PC saves its replica at:
+  %LOCALAPPDATA%/SaveSales/savesales.sqlite3
+This is outside OneDrive and is not a network-shared database file. The replicas
+exchange operations through the LAN service; SQLite files are never opened remotely.
+To back up, close SaveSales on that PC and copy its SaveSales data directory.
+Do not distribute one PC's live database to the other PCs: each needs its own node ID.
+Distribute the executable only. Restore a backup to the same PC with SaveSales closed.
+The normal program requires no internet connection, Python installation, or cloud.
+
+WINDOWS PERMISSION
+All PCs can become coordinator, so allow SaveSales.exe on Private networks on each
+PC when Windows asks. This is an operating-system permission, not a SaveSales pairing
+or host approval step. Keep Windows Firewall enabled. The service uses UDP 54545
+for discovery and an automatically assigned TCP port advertised in its response.
+An application firewall exception is appropriate because the TCP port is dynamic.
+For source runs, the exception must apply to the Python executable running main.py.
+No static IP, router port forwarding, or network drive is needed.
+A firewall policy that blocks the app or guest Wi-Fi/client isolation can prevent
+PCs from discovering one another. Application code cannot bypass those restrictions.
+If Windows did not show a permission prompt, an administrator may need to allow the
+app through Windows Security > Firewall & network protection > Allow an app through
+firewall. This build is unsigned, so Windows may also display an application trust prompt.
+Microsoft reference:
+https://support.microsoft.com/en-us/windows/security/windows-security/firewall-and-network-protection-in-the-windows-security-app
+
+EXACT TWO-PC ACCEPTANCE TEST
+1. Close all older SaveSales windows and old servers on both PCs.
+2. Put the same SaveSales.exe on PCs A and B connected to the store's same LAN.
+   For existing-data migration, start A first as described above, then B.
+3. Open ONLY SaveSales.exe on each. Allow the Windows Private-network permission.
+   Wait for green Connected / LAN synced on both. No extra terminal is required.
+4. On A, open Employees and add Jeff using admin (or the existing configured password).
+   Within a few seconds, Jeff must appear on B.
+5. On B, open Jeff and click Clock In. Confirm the exact same timestamp appears on A.
+6. On A, start Lunch Break. B must show the lunch-start time and End Lunch Break.
+7. On B, click End Lunch Break. A must show the same lunch-end time.
+8. On A, click Clock Out. B must show the same clock-out time.
+9. On both, open the calendar date and compare all four timestamps. Navigate to an
+   older month on one PC and confirm a refresh does not reset that month selection.
+10. On B, go back to Employees while Jeff is selected, click Delete Employee,
+    enter the correct admin password, and confirm Jeff disappears from A too.
+    An incorrect password must not delete the employee.
+11. Add a test employee on either PC. Close SaveSales on A. Leave B open, wait up
+    to about 15 seconds, then add another employee on B. Reopen A and confirm both.
+12. Now close B, leave A open, make a new change on A, reopen B, and confirm it.
+    Testing both directions exercises loss of whichever PC was the coordinator.
+13. Close both applications and reopen them. Confirm employees and time history persist.
+14. Optional failure test: disconnect/reconnect one PC's network and wait for
+    convergence. During the gap the status may be red; automatic takeover may then
+    make that isolated PC green as a standalone coordinator. See the partition limit.
+
+STATUS AND RETRIES
+Green means this app can use a currently elected coordinator, including itself.
+Red means discovery, election, synchronization, or a connection failure is in progress.
+The client retries automatically. Opening two copies on the same Windows PC is blocked
+by the service's exclusive discovery socket; use one application per PC.
+The UI does not freeze while the peer service runs. Offline button actions are not
+queued for surprise execution later. If a write response is lost, the result may be
+unknown: inspect the shared state after reconnection before retrying.
+
+HOW DATA SAFETY WORKS
+Each PC has a SQLite WAL database with FULL synchronous transactions. A process lock
+serializes local journal changes, and a coordinator lock serializes business requests.
+Writes are journal operations, not uploads replacing the whole employee database.
+The coordinator tries to replicate to live peers before replying; background sync
+continues automatically. A sudden failure before any other replica receives a write
+can still lose that most recent write if the original disk never returns.
+Missing operations are merged by ID, preserving both sides' journals. Duplicate IDs
+with different contents are rejected transactionally. Repeated clock actions never
+overwrite an existing timestamp. Lunch start and end are separate operations.
+Employee deletion retains a tombstone. A returning stale replica cannot resurrect a
+deleted employee. Recreating the same name gives it a new identity; stale operations
+against the previous employee are rejected. Deletion still removes the visible history,
+as the original UI did; the underlying journal retains it for replica reconciliation.
+Clock timestamps come from the current coordinator's Windows clock. Keep automatic
+Windows time/timezone enabled on both PCs. The existing one-shift-per-date model remains.
+
+NETWORK PARTITION LIMIT — PLEASE READ
+This implementation intentionally favors automatic takeover with as few as two PCs.
+It is NOT a quorum-consensus system and does NOT guarantee a single writer during an
+arbitrary network partition. With two peers, a broken link is indistinguishable from
+failure of the other peer. A disconnected side can elect itself after the timeout.
+On a connected LAN, stable node IDs, election settling, peer agreement and request
+fencing converge on one coordinator. On reunion, immutable journals merge and both
+PCs deterministically show the same result. Deleted identities stay deleted.
+If disconnected PCs recorded incompatible times, the deterministic journal order chooses
+the displayed record, retains all original operations, and shows Review time conflicts
+in the sidebar. Open it to see the competing timestamp and selected result.
+This prevents silent whole-database replacement, but it is eventual reconciliation,
+not a guarantee that every partition-time action will remain the displayed value.
+Strict split-brain prevention would require quorum/fencing; with only two PCs that
+would make the lone survivor unavailable for writes. That conflicts with automatic
+single-survivor takeover without another witness. Raft reference:
+https://raft.github.io/
+
+ADMIN AND TRUST
+The initial admin password remains admin unless SAVESALES_ADMIN_PASSWORD is set for
+the first initializing peer. The password hash replicates with the journal, so another
+PC becoming coordinator uses the same password, not its own local environment value.
+Changing the environment after initialization does not change an existing journal's
+password. Password checking is enforced on protected API actions as well as the dialog.
+This is a trusted-store-LAN protocol. HTTP and automatic peer admission are not hardened
+against a malicious machine already on that LAN. No cloud or internet service is used.
+
+IMPLEMENTATION FILES
+main.py: existing CustomTkinter UI, shared snapshots, status, conflict review.
+lan_client.py: background worker that automatically creates/closes PeerNode.
+server.py: embedded Flask service, UDP discovery, coordinator election, SQLite journal.
+SaveSales_network.py: compatibility launcher for main.py.
+requirements.txt: runtime source dependencies.
+test_lan.py: durable storage and real-socket peer tests.
+build_exe.ps1: reproducible one-file Windows build command.
+
+SOURCE RUN AND BUILD (DEVELOPERS ONLY)
+Source development: python -m pip install -r requirements.txt, then python main.py.
+The store owner using SaveSales.exe does not need these commands.
+For another build: install pyinstaller into that Python environment, then run
+./build_exe.ps1 -Python './.venv/Scripts/python.exe'
+The build outputs dist/SaveSales.exe with Python, Tk, Flask, SQLite and dependencies.
+
+VALIDATION PERFORMED
+- Syntax compilation passed for all application modules and test_lan.py.
+- Automated suite: 12 tests run, 11 passed, 1 environment-dependent broadcast test skipped.
+- Passed real UDP request/reply discovery and real HTTP communication among isolated
+  local replicas; simultaneous startup with three peers elected one coordinator.
+- Passed add/delete, wrong/correct admin password, all four clock events and history sync.
+- Passed coordinator shutdown, surviving peer writes, restart and catch-up.
+- Passed simulated partition/reunion, independent additions and deletion-vs-clock recovery.
+- Passed concurrent writes, migration, restart durability, transaction rollback, and
+  deletion/recreation protection.
+- Actual desktop smoke test passed startup, green status, server-checked admin dialog,
+  employee/calendar/history screens, remote deletion refresh, navigation, and shutdown.
+- SaveSales.exe built and smoke-tested with isolated LocalAppData; it launched, elected
+  itself, answered discovery and /state, and persisted SQLite.
+- Broadcast packets were sent to limited and adapter-derived broadcast addresses.
+  This Windows host did not deliver its own LAN broadcast back to the test listener,
+  including a raw-socket check, so that physical discovery path is NOT certified here.
+  Run the two-physical-PC test above before using this build in the store.
+- Existing employees.json and employee_times.json still match their backup SHA-256 hashes.

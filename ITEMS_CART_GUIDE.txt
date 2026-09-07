@@ -1,0 +1,132 @@
+SaveSales — Items, Cart and Shared Sales
+
+UPGRADE
+1. Close the old SaveSales application on every PC.
+2. Replace SaveSales.exe with this same new build on every PC, then open it.
+3. No separate server, IP entry or coordinator selection is required.
+4. Keep the existing %LOCALAPPDATA%/SaveSales data directory on each PC. Do not
+   replace or copy databases between PCs. The additive migration creates the new
+   tables while preserving employee/attendance events, admin settings and node IDs.
+5. Allow the app on Windows Private networks if Windows asks again for permission.
+
+This build uses protocol SaveSales-peer-v3 because earlier builds cannot process
+product and sale operations. All PCs must be upgraded together; do not mix versions.
+The executable bundles Python, CustomTkinter, Pillow, Flask and SQLite. No runtime
+internet connection or separate Python installation is required. It is unsigned.
+Source files were updated in place; backup_before_items_cart holds the previous files.
+
+ITEMS
+The Items screen displays rounded product cards with image, name, price, description
+and Add to Cart. Click a card to select it; its border turns blue.
++ Add Item prompts for the existing admin password, then opens the product form.
+A nonempty name and positive price are required. Enter 6.00 or 6,00 for R$ 6.00.
+Prices support at most two decimal places and are stored as integer cents.
+Description and image are optional. JPEG/PNG/WebP/BMP images can be imported.
+Images are resized proportionally to at most 512x384, compressed to JPEG, and limited
+to 160,000 bytes. Originals are not modified. The catalog never stores a Windows
+image path: each replica has image bytes in its items.image BLOB column.
+Delete Item requires the admin password and an explicit confirmation. Cancellation
+leaves the product untouched. Deletion removes the product from the shared catalog,
+but does not change any previously completed sale or receipt.
+
+CART
+Each PC has an independent in-memory cart for its current customer. Adding the same
+product again increases quantity. Use +, minus or Remove to change the current cart.
+These cart actions never require an admin password and never delete catalog products.
+Customer Name is optional. An empty name saves a walk-in customer sale.
+Unit prices, subtotals and total use integer cents; there is no tax system added.
+Unfinished carts are not transmitted to other PCs and are not retained after closing
+the application. Products and completed sales are the shared data.
+
+SAVE SALE
+Save Sale stores a unique ID, date/time, optional customer name and immutable line
+snapshots containing item ID, name, quantity, unit price and subtotal, plus total.
+The form clears the cart and customer name only after success is confirmed, and shows
+a short confirmation. The completed sale appears in Daily Tracking on all peers.
+A sale ID and payload are frozen when Save Sale is first pressed. If a response is
+lost, Retry Save Sale reuses them rather than creating a duplicate purchase. Editing
+is temporarily locked while that result is uncertain. Automatic refresh also notices
+an already-saved sale and clears the cart. A definite validation rejection unlocks
+editing. If the app is closed during uncertainty, inspect Daily Tracking before
+creating another purchase for that customer.
+If a product was deleted before the purchase could be saved, the server rejects the
+purchase and asks you to remove that product. It does not silently omit a line.
+A retry of an already-saved sale still succeeds after catalog deletion without
+creating another sale. Receipts always use their saved names and prices.
+Sale timestamps are captured once on the cashier PC with its timezone offset; keep
+Windows clocks/timezones correct. Attendance retains its coordinator-clock behavior.
+
+DAILY TRACKING
+Select a date in YYYY-MM-DD format and click Show date. The screen shows completed
+sales and that day's exact total. View opens a receipt with customer, lines and total.
+Receipt contents do not depend on the current catalog and survive product deletion.
+
+TWO-PC ACCEPTANCE TEST
+1. Open the new executable on PCs A and B on the same store LAN. Wait for green.
+2. On A, use + Add Item, authenticate, and create Coca-Cola at 6.00 with an image.
+3. Confirm its name, R$ 6.00 price, description and image appear on B automatically.
+4. On B, add Coca-Cola twice. Cart should contain one row, quantity 2, total R$ 12.00.
+5. Open Cart on A. It should still be empty: B's current purchase is private to B.
+6. On B, use minus/plus and Remove. No admin password should be requested.
+7. Add it twice again, enter a customer name, and Save Sale. Confirm cart and name clear.
+8. On A, open Daily Tracking and View the saved sale. Verify quantity 2 and R$ 12.00.
+9. On either PC, save another purchase with Customer Name empty. Verify it succeeds.
+10. On B, select the product card and Delete Item. A wrong password must be rejected.
+    With the correct password, cancel the confirmation first and verify it remains.
+    Repeat and confirm deletion. The product must disappear on A too.
+11. View both historical sales again. Their original product names/prices must remain.
+12. Close one PC's app, wait for automatic takeover if necessary, then reopen it.
+    Confirm catalog, receipts, employees and attendance converge. Repeat in reverse.
+
+DATABASE AND REPLICATION
+The same SQLite database now has typed items, sales and sale_items tables, plus item
+removal tombstones. The migration is additive; it does not delete employee data.
+Images are BLOBs in items. sale_items stores receipt names/prices independently and
+has no dependency on a live item row. Sale and line inserts are one transaction.
+The existing immutable event journal is still used for replication and reconciliation.
+Commerce records therefore also have serialized journal operations (including base64
+image transport). This is intentional: the journal preserves the established failover
+architecture, while normalized tables provide typed catalog and sale storage.
+Projection rows and journal inserts commit or roll back together. Deletion tombstones
+prevent an older returning replica from recreating a deleted catalog entry.
+Synchronization exchanges event IDs and transfers only missing operations; it does not
+resend every image for each sale. Unchanged UI state polls use a digest response.
+
+PRESERVED NETWORK LIMITS
+All PCs retain equal business permissions, automatic discovery, background services,
+coordinator election/failover, and replicas in %LOCALAPPDATA%/SaveSales.
+The prior availability-oriented partition policy remains: a broken network can
+briefly create multiple coordinators. Journals reconcile on reunion; this is not
+quorum consensus or an absolute split-brain guarantee. Use the app on a trusted LAN.
+Windows firewall permission is still necessary where the OS blocks incoming traffic.
+UDP discovery uses 54545 and the service advertises its automatically selected TCP port.
+
+VALIDATION
+20 automated tests passed in the full suite, covering the existing LAN/attendance
+features and the new commerce features. This run also passed the local UDP broadcast
+test. The commerce suite was re-run after the final retry-error handling adjustment.
+Real CustomTkinter checks passed product form/image import, cards, quantity changes,
+cart removal without authorization, customer entry, sale/clear, receipts, delete
+confirmation/cancellation, navigation and shutdown. Screens were visually checked
+at 1000x600. Sample test screenshots accompany this delivery.
+The rebuilt executable was tested with isolated data and successfully performed
+discovery/election, image storage, sale creation, exact totals, duplicate retry
+handling and historical receipt preservation after product deletion.
+Syntax checks passed. Original employee JSON files still match their backup hashes.
+Peer tests used real UDP/HTTP connections and independent temporary databases on one
+Windows machine. Two physical PCs were not available; run the checklist above.
+
+DEVELOPER COMMANDS
+python -m pip install -r requirements.txt
+python -m unittest test_lan test_commerce -v
+python test_shop_ui.py
+python -m pip install pyinstaller
+./build_exe.ps1 -Python './.venv/Scripts/python.exe'
+
+FILES
+commerce.py: prices, thumbnail preparation, cart model, schema and commerce operations.
+shop_ui.py: catalog, item form, cart, Daily Tracking and receipt screens.
+main.py: integration with the existing desktop UI.
+server.py: transactional commerce projection and incremental peer synchronization.
+lan_client.py: conditional polling and definite-vs-uncertain request failures.
+test_commerce.py and test_shop_ui.py: new automated/backend and real desktop tests.
